@@ -1,6 +1,5 @@
 import requests
 import argparse
-import dotenv 
 import os
 import google.generativeai as genai
 import time
@@ -8,10 +7,14 @@ import urllib.request
 import base64
 import tempfile
 import anthropic
+import logging
+from dotenv import load_dotenv
 
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
-dotenv.load_dotenv()
+load_dotenv()
 CUSTOM_SEARCH_API = os.getenv("CUSTOM-SEARCH-API")
 SEARCH_ENGINE_ID = os.getenv("SEARCH-ENGINE-ID")
 GEMINI_API = os.getenv("GEMINI-API")
@@ -25,28 +28,41 @@ genai.configure(api_key=GEMINI_API)
 
 def rs(text, num_results=10):
     """
-    Perform a Google Custom Search for pages containing the given email address.
+    Perform a Google Custom Search for pages containing the given text.
     """
+    if not CUSTOM_SEARCH_API or not SEARCH_ENGINE_ID:
+        raise Exception("Google Custom Search API credentials not configured")
+    
     url = "https://www.googleapis.com/customsearch/v1"
     params = {
         "key": CUSTOM_SEARCH_API,
         "cx": SEARCH_ENGINE_ID,
         "q": f"intext:{text}",
-        "num": num_results
+        "num": min(num_results, 10)  # Google API limit
     }
     
-    response = requests.get(url, params=params)
-    response.raise_for_status()
-    data = response.json()
-    
-    results = []
-    for item in data.get("items", []):
-        results.append({
-            "title": item.get("title"),
-            "link": item.get("link"),
-            "snippet": item.get("snippet")
-        })
-    return results
+    try:
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        if 'error' in data:
+            raise Exception(f"Google API Error: {data['error'].get('message', 'Unknown error')}")
+        
+        results = []
+        for item in data.get("items", []):
+            results.append({
+                "title": item.get("title"),
+                "link": item.get("link"),
+                "snippet": item.get("snippet")
+            })
+        
+        logger.info(f"Text search completed: {len(results)} results for query '{text[:50]}...'")
+        return results
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Google Search API request failed: {str(e)}")
+        raise Exception(f"Search request failed: {str(e)}")
 
 import requests
 from bs4 import BeautifulSoup
@@ -75,9 +91,9 @@ def deep_search(image_data=None, text_query=None, num_text_results=10):
             for result in face_results:
                 result['source'] = 'face_search'
                 all_results.append(result)
-            print(f"Face search found {len(face_results)} results")
+            logger.info(f"Face search found {len(face_results)} results")
         except Exception as e:
-            print(f"Face search failed: {e}")
+            logger.error(f"Face search failed: {e}")
     
     # 2. Perform text search if query provided
     if text_query:
@@ -87,11 +103,12 @@ def deep_search(image_data=None, text_query=None, num_text_results=10):
             for result in text_results:
                 result['source'] = 'text_search'
                 all_results.append(result)
-            print(f"Text search found {len(text_results)} results")
+            logger.info(f"Text search found {len(text_results)} results")
         except Exception as e:
-            print(f"Text search failed: {e}")
+            logger.error(f"Text search failed: {e}")
     
     if not all_results:
+        logger.warning("No results found from either search method")
         return {"error": "No results found from either search method"}
     
     # 3. Remove duplicate links
@@ -102,22 +119,33 @@ def deep_search(image_data=None, text_query=None, num_text_results=10):
             seen_links.add(item['link'])
             unique_results.append(item)
     
-    print(f"Processing {len(unique_results)} unique links for deep search...")
+    logger.info(f"Processing {len(unique_results)} unique links for deep search...")
     
     # 4. Perform deep search on all unique results
     summaries = []
     for i, item in enumerate(unique_results, 1):
         try:
-            print(f"Processing link {i}/{len(unique_results)}: {item['link']}")
+            logger.info(f"Processing link {i}/{len(unique_results)}: {item['link']}")
             
-            # Download the page
-            resp = requests.get(item['link'], timeout=15)
+            # Download the page with better error handling
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            resp = requests.get(item['link'], timeout=15, headers=headers, allow_redirects=True)
             resp.raise_for_status()
 
             # Extract visible text
             soup = BeautifulSoup(resp.text, 'html.parser')
+            
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.extract()
+            
             text = soup.get_text(separator='\n', strip=True)
             excerpt = '\n'.join(text.splitlines()[:500])  # first ~500 lines to stay under context limit
+
+            if not excerpt.strip():
+                raise Exception("No readable content found")
 
             # Build a targeted prompt
             prompt = (
@@ -126,20 +154,24 @@ def deep_search(image_data=None, text_query=None, num_text_results=10):
                 "Please write a concise, one-paragraph summary of the above."
             )
 
-            # Generate the summary
-            response = model.generate_content(prompt)
-            summary = response.text.strip()
+            # Generate the summary with error handling
+            try:
+                response = model.generate_content(prompt)
+                summary = response.text.strip() if response.text else "No summary generated"
+            except Exception as gemini_error:
+                logger.warning(f"Gemini API error for {item['link']}: {gemini_error}")
+                summary = "Summary generation failed"
 
             summaries.append({
                 "title": item['title'],
                 "link": item['link'],
                 "snippet": item.get('snippet', ''),
                 "source": item['source'],
-                "summary": summary or "No summary generated"
+                "summary": summary
             })
             
         except Exception as e:
-            print(f"Failed to process {item['link']}: {e}")
+            logger.warning(f"Failed to process {item['link']}: {e}")
             summaries.append({
                 "title": item['title'],
                 "link": item['link'],
@@ -159,31 +191,48 @@ def search_by_face(image_file_path):
     """
     Perform reverse image search using facecheck.id
     """
+    if not FACECHECK_APITOKEN:
+        raise Exception("Facecheck API token not configured")
+    
     if FACECHECK_TESTING_MODE:
-        print('****** TESTING MODE search, results are inaccurate, and queue wait is long, but credits are NOT deducted ******')
+        logger.info('Running in TESTING MODE - results are inaccurate, but credits are NOT deducted')
 
     site = 'https://facecheck.id'
     headers = {'accept': 'application/json', 'Authorization': FACECHECK_APITOKEN}
     
-    with open(image_file_path, 'rb') as f:
-        files = {'images': f, 'id_search': None}
-        response = requests.post(site + '/api/upload_pic', headers=headers, files=files).json()
+    try:
+        with open(image_file_path, 'rb') as f:
+            files = {'images': f, 'id_search': None}
+            response = requests.post(site + '/api/upload_pic', headers=headers, files=files, timeout=30).json()
 
-    if response['error']:
-        raise Exception(f"{response['error']} ({response['code']})")
-
-    id_search = response['id_search']
-    print(response['message'] + ' id_search=' + id_search)
-    json_data = {'id_search': id_search, 'with_progress': True, 'status_only': False, 'demo': FACECHECK_TESTING_MODE}
-
-    while True:
-        response = requests.post(site + '/api/search', headers=headers, json=json_data).json()
         if response['error']:
             raise Exception(f"{response['error']} ({response['code']})")
-        if response['output']:
-            return response['output']['items']
-        print(f'{response["message"]} progress: {response["progress"]}%')
-        time.sleep(1)
+
+        id_search = response['id_search']
+        logger.info(f"Face search initiated: {response['message']} id_search={id_search}")
+        json_data = {'id_search': id_search, 'with_progress': True, 'status_only': False, 'demo': FACECHECK_TESTING_MODE}
+
+        # Add timeout to prevent infinite loops
+        max_attempts = 60  # 60 seconds max
+        attempts = 0
+        
+        while attempts < max_attempts:
+            response = requests.post(site + '/api/search', headers=headers, json=json_data, timeout=30).json()
+            if response['error']:
+                raise Exception(f"{response['error']} ({response['code']})")
+            if response['output']:
+                logger.info(f"Face search completed: {len(response['output']['items'])} results found")
+                return response['output']['items']
+            
+            logger.info(f"Face search progress: {response['progress']}%")
+            time.sleep(1)
+            attempts += 1
+        
+        raise Exception("Face search timed out after 60 seconds")
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Facecheck API request failed: {str(e)}")
+        raise Exception(f"Face search request failed: {str(e)}")
 
 def face_search_formatted(image_data, num_results=3):
     """
