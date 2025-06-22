@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Clean up any proxy-related environment variables that might interfere
+for proxy_var in ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']:
+    if proxy_var in os.environ:
+        logger.warning(f"Removing proxy environment variable: {proxy_var}")
+        del os.environ[proxy_var]
+
 CUSTOM_SEARCH_API = os.getenv("CUSTOM-SEARCH-API")
 SEARCH_ENGINE_ID = os.getenv("SEARCH-ENGINE-ID")
 GEMINI_API = os.getenv("GEMINI-API")
@@ -283,8 +290,15 @@ def analyze_with_claude(prompt, summaries_data):
     if not CLAUDE_API_KEY:
         raise Exception("Claude API key not found. Please set CLAUDE-API-KEY in your .env file")
     
-    # Initialize Claude client
-    client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+    try:
+        # Initialize Claude client with explicit parameters only
+        client = anthropic.Anthropic(
+            api_key=CLAUDE_API_KEY,
+            # Don't pass any proxy or other parameters that might cause issues
+        )
+    except Exception as init_error:
+        logger.error(f"Failed to initialize Claude client: {init_error}")
+        raise Exception(f"Claude client initialization failed: {str(init_error)}")
     
     # Prepare the context from summaries
     context = ""
@@ -310,10 +324,10 @@ User's Analysis Request:
 """
     
     try:
-        # Call Claude Sonnet 4
+        # Call Claude Sonnet (use Claude 3.5 Sonnet which is more stable)
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",  # Claude Sonnet 4
-            max_tokens=4000,
+            model="claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (more stable)
+            max_tokens=1000,  # Reduced for simple numeric response
             temperature=0.1,  # Low temperature for more focused analysis
             messages=[
                 {
@@ -323,9 +337,16 @@ User's Analysis Request:
             ]
         )
         
-        return response.content[0].text
+        # Extract text from response content
+        if response.content and len(response.content) > 0:
+            result_text = response.content[0].text.strip()
+            logger.info(f"Claude analysis completed: {result_text}")
+            return result_text
+        else:
+            raise Exception("Empty response from Claude API")
         
     except Exception as e:
+        logger.error(f"Claude API call failed: {str(e)}")
         raise Exception(f"Claude API error: {str(e)}")
 
 def main():

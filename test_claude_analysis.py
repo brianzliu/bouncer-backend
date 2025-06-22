@@ -13,7 +13,7 @@ import json
 import os
 import argparse
 
-def test_claude_trustworthiness_analysis(text_query=None, image_path=None, num_text_results=10, api_url="http://localhost:5001"):
+def test_claude_trustworthiness_analysis(text_query=None, image_path=None, num_text_results=10, api_url="https://bouncer-backend-t8m1.onrender.com"):
     """
     Test the Claude trustworthiness analysis endpoint that performs deep search and analysis in one call.
     
@@ -206,7 +206,7 @@ def main():
     parser.add_argument('--text', type=str, help='Text query to search for')
     parser.add_argument('--image', type=str, help='Path to image file for face search')
     parser.add_argument('--num-results', type=int, default=10, help='Number of text search results (default: 10)')
-    parser.add_argument('--api-url', type=str, default='http://localhost:5001', help='API base URL (default: http://localhost:5001)')
+    parser.add_argument('--api-url', type=str, default='https://bouncer-backend-t8m1.onrender.com', help='API base URL (default: https://bouncer-backend-t8m1.onrender.com)')
     
     args = parser.parse_args()
     
