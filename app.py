@@ -226,8 +226,14 @@ def analyze_summaries_endpoint():
         analysis = analyze_with_claude(prompt, summaries_data)
         
         logger.info("Analysis completed successfully")
-        # Return only the text response from Claude
-        return analysis, 200, {'Content-Type': 'text/plain'}
+        
+        # Format response as: score:explanation:raw_json_summaries
+        import json
+        raw_summaries_json = json.dumps(summaries_data, separators=(',', ':'))
+        formatted_response = f"{analysis}:{raw_summaries_json}"
+        
+        # Return the formatted response with score, explanation, and raw JSON
+        return formatted_response, 200, {'Content-Type': 'text/plain'}
         
     except Exception as e:
         logger.error(f"Analysis error: {str(e)}")
