@@ -227,13 +227,38 @@ def analyze_summaries_endpoint():
         
         logger.info("Analysis completed successfully")
         
-        # Format response as: scoreANDexplanationANDraw_json_summaries
-        import json
-        raw_summaries_json = json.dumps(summaries_data, separators=(',', ':'))
-        formatted_response = f"{analysis}AND{raw_summaries_json}"
+        # Parse Claude's response (format: scoreANDexplanation)
+        try:
+            parts = analysis.split("AND", 1)  # Split on first "AND" only
+            if len(parts) == 2:
+                risk_score = parts[0].strip()
+                explanation = parts[1].strip()
+                
+                # Try to convert risk_score to integer
+                try:
+                    risk_score = int(risk_score)
+                except ValueError:
+                    # If conversion fails, keep as string
+                    pass
+            else:
+                # If parsing fails, use the whole response as explanation
+                risk_score = "unknown"
+                explanation = analysis
+        except Exception as parse_error:
+            logger.warning(f"Failed to parse Claude response: {parse_error}")
+            risk_score = "unknown"
+            explanation = analysis
         
-        # Return the formatted response with score, explanation, and raw JSON
-        return formatted_response, 200, {'Content-Type': 'text/plain'}
+        # Format response as JSON with three top-level keys
+        import json
+        response_data = {
+            "risk_score": risk_score,
+            "explanation": explanation,
+            "raw_summaries": summaries_data
+        }
+        
+        # Return the JSON response
+        return jsonify(response_data), 200
         
     except Exception as e:
         logger.error(f"Analysis error: {str(e)}")
