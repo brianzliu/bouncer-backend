@@ -227,10 +227,10 @@ def analyze_summaries_endpoint():
         
         logger.info("Analysis completed successfully")
         
-        # Format response as: score:explanation:raw_json_summaries
+        # Format response as: scoreANDexplanationANDraw_json_summaries
         import json
         raw_summaries_json = json.dumps(summaries_data, separators=(',', ':'))
-        formatted_response = f"{analysis}:{raw_summaries_json}"
+        formatted_response = f"{analysis}AND{raw_summaries_json}"
         
         # Return the formatted response with score, explanation, and raw JSON
         return formatted_response, 200, {'Content-Type': 'text/plain'}

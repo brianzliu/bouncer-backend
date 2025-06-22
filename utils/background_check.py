@@ -318,9 +318,9 @@ Result {i} (Source: {result.get('source', 'unknown')}):
 You are an expert analyst reviewing the trustworthiness of a person based on the search results where 0 is most trustworthy and 100 is least trustworthy, rounded to the ones digit. Do not output any other text/letters besides a number.
 As for strict guidelines, you must base your output number on the User's Analysis Request based on what the user deems more risky and less risky pieces of information. 
 
-After providing the numerical score, add a colon (:) and then provide a brief explanation (2-3 sentences) of why you assigned this specific risk score based on the evidence found in the search results.
+After providing the numerical score, add "AND" and then provide a brief explanation (2-3 sentences) of why you assigned this specific risk score based on the evidence found in the search results.
 
-Format your response exactly as: <number>:<explanation>
+Format your response exactly as: <number>AND<explanation>
 
 {context}
 
