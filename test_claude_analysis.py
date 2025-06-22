@@ -15,8 +15,7 @@ import argparse
 
 def test_claude_trustworthiness_analysis(text_query=None, image_path=None, num_text_results=10, api_url="http://localhost:5001"):
     """
-    Test the Claude trustworthiness analysis by first performing deep search,
-    then analyzing the results for trustworthiness scoring.
+    Test the Claude trustworthiness analysis endpoint that performs deep search and analysis in one call.
     
     Args:
         text_query (str): Text query to search for
@@ -37,16 +36,7 @@ def test_claude_trustworthiness_analysis(text_query=None, image_path=None, num_t
     print(f"Number of text results: {num_text_results}")
     print("-" * 60)
     
-    # Step 1: Perform deep search
-    print("Step 1: Performing deep search...")
-    deep_search_endpoint = f"{api_url}/deep-search"
-    
-    # Prepare form data for deep search
-    data = {'num_text_results': num_text_results}
-    if text_query:
-        data['text'] = text_query
-    
-    # Prepare files for deep search
+    # Prepare files for analysis endpoint
     files = {}
     if image_path:
         if not os.path.exists(image_path):
@@ -63,24 +53,7 @@ def test_claude_trustworthiness_analysis(text_query=None, image_path=None, num_t
         files['image'] = open(image_path, 'rb')
     
     try:
-        # Make deep search request
-        deep_search_response = requests.post(deep_search_endpoint, data=data, files=files)
-        
-        if deep_search_response.status_code != 200:
-            print(f"Deep search failed with status {deep_search_response.status_code}")
-            try:
-                error_data = deep_search_response.json()
-                print(json.dumps(error_data, indent=2))
-            except:
-                print(deep_search_response.text)
-            return
-        
-        summaries_data = deep_search_response.json()
-        print(f"Deep search completed! Found {summaries_data.get('total_results', 0)} results")
-        print("-" * 60)
-        
-        # Step 2: Test various trustworthiness analysis prompts
-        print("Step 2: Analyzing trustworthiness with Claude...")
+        print("Performing integrated deep search + Claude analysis...")
         analysis_endpoint = f"{api_url}/analyze-summaries"
         
         # Trustworthiness test prompts - focusing on different risk factors
@@ -112,18 +85,24 @@ def test_claude_trustworthiness_analysis(text_query=None, image_path=None, num_t
             print(f"Risk Guidelines: {test_case['prompt']}")
             print("-" * 40)
             
-            # Prepare the request payload
-            payload = {
-                "prompt": test_case['prompt'],
-                "summaries_data": summaries_data
+            # Prepare the request data
+            data = {
+                'prompt': test_case['prompt'],
+                'num_text_results': num_text_results
             }
+            if text_query:
+                data['text'] = text_query
+            
+            # Reset file pointer for each request
+            if files.get('image'):
+                files['image'].seek(0)
             
             try:
-                # Make the Claude analysis request
+                # Make the integrated analysis request
                 response = requests.post(
                     analysis_endpoint,
-                    json=payload,
-                    headers={'Content-Type': 'application/json'}
+                    data=data,
+                    files=files
                 )
                 
                 print(f"Status Code: {response.status_code}")
@@ -183,17 +162,11 @@ def show_usage_example():
     print("="*60)
     
     usage_example = '''
-# Example: Comprehensive trustworthiness analysis
+# Example: Comprehensive trustworthiness analysis (one-call method)
 
 import requests
 
-# Step 1: Perform deep search
-deep_search_response = requests.post('http://localhost:5001/deep-search', 
-                                   data={'text': 'john.doe@email.com'},
-                                   files={'image': open('person.jpg', 'rb')})
-summaries_data = deep_search_response.json()
-
-# Step 2: Analyze for different risk factors
+# Define risk assessment prompts
 risk_assessments = {
     "criminal": "Criminal records and legal issues are high risk. Clean background is low risk.",
     "financial": "Debt and financial fraud are high risk. Stable income is low risk.", 
@@ -201,14 +174,18 @@ risk_assessments = {
     "identity": "Fake profiles and inconsistent info are high risk. Verified identity is low risk."
 }
 
+# Analyze for different risk factors (integrated deep search + Claude analysis)
 scores = {}
 for risk_type, risk_prompt in risk_assessments.items():
-    payload = {
-        "prompt": risk_prompt,
-        "summaries_data": summaries_data
+    data = {
+        'prompt': risk_prompt,
+        'text': 'john.doe@email.com',
+        'num_text_results': 10
     }
+    files = {'image': open('person.jpg', 'rb')}
     
-    response = requests.post('http://localhost:5001/analyze-summaries', json=payload)
+    response = requests.post('http://localhost:5001/analyze-summaries', 
+                           data=data, files=files)
     scores[risk_type] = float(response.text.strip())
 
 # Calculate overall trustworthiness (weighted average)

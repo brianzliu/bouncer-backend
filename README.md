@@ -19,7 +19,7 @@ A comprehensive Flask API for person intelligence gathering using facial recogni
 | `/rs` | POST | Text-based search (JSON body: `{"text": "query"}`) |
 | `/face-search` | POST | Face search (form-data: `image` file) |
 | `/deep-search` | POST | Combined search (form-data: `text`, `image`) |
-| `/analyze-summaries` | POST | Claude AI analysis (JSON body: `{"prompt": "...", "summaries_data": {...}}`) |
+| `/analyze-summaries` | POST | Integrated deep search + Claude analysis (form-data: `prompt`, `text`, `image`) |
 
 ## 🛠️ Setup Instructions
 
@@ -164,6 +164,7 @@ curl -X POST http://localhost:5001/deep-search \
 
 ### Claude Analysis (`/analyze-summaries`):
 Returns plain text with a floating point number (0.00-1.00) representing trustworthiness score.
+Integrates deep search and Claude analysis in one call.
 
 ## 🔒 Security Notes
 
