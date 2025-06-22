@@ -315,7 +315,7 @@ Result {i} (Source: {result.get('source', 'unknown')}):
     
     # Create the full prompt for Claude
     full_prompt = f"""
-You are an expert analyst reviewing the trustworthiness of a person based on the search results where 0 is least trustworthy and 1 is most trustworthy. Only output a floating point number rounded to 2 decimal places between 0 and 1 and no other text.
+You are an expert analyst reviewing the trustworthiness of a person based on the search results where 0 is most trustworthy and 100 is least trustworthy. Only output a floating point number rounded to 2 decimal places between 0 and 1 and no other text.
 As for strict guidelines, you must base your output number on the User's Analysis Request based on what the user deems more risky and less risky pieces of information. 
 {context}
 
@@ -326,7 +326,7 @@ User's Analysis Request:
     try:
         # Call Claude Sonnet (use Claude 3.5 Sonnet which is more stable)
         response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (more stable)
+            model="claude-sonnet-4-20250514",  # Claude 3.5 Sonnet (more stable)
             max_tokens=1000,  # Reduced for simple numeric response
             temperature=0.1,  # Low temperature for more focused analysis
             messages=[
