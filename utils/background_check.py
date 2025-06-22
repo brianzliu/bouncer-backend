@@ -28,7 +28,7 @@ GEMINI_API = os.getenv("GEMINI-API")
 CLAUDE_API_KEY = os.getenv("CLAUDE-API-KEY")  # Add your Claude API key to .env file
 
 # Facecheck.id configuration
-FACECHECK_TESTING_MODE = True
+FACECHECK_TESTING_MODE = False
 FACECHECK_APITOKEN = os.getenv("FACECHECK-API-TOKEN")
 
 genai.configure(api_key=GEMINI_API)
