@@ -315,7 +315,7 @@ Result {i} (Source: {result.get('source', 'unknown')}):
     
     # Create the full prompt for Claude
     full_prompt = f"""
-You are an expert analyst reviewing the trustworthiness of a person based on the search results where 0 is most trustworthy and 100 is least trustworthy. Only output a floating point number rounded to 2 decimal places between 0 and 1 and no other text.
+You are an expert analyst reviewing the trustworthiness of a person based on the search results where 0 is most trustworthy and 100 is least trustworthy. 
 As for strict guidelines, you must base your output number on the User's Analysis Request based on what the user deems more risky and less risky pieces of information. 
 {context}
 
